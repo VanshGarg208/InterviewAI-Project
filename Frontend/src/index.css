@@ -1,0 +1,86 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 0%;
+    --foreground: 210 20% 95%;
+
+    --card: 230 15% 9%;
+    --card-foreground: 210 20% 95%;
+
+    --popover: 230 15% 9%;
+    --popover-foreground: 210 20% 95%;
+
+    --primary: 160 84% 50%;
+    --primary-foreground: 230 15% 6%;
+
+    --secondary: 230 15% 14%;
+    --secondary-foreground: 210 20% 85%;
+
+    --muted: 230 12% 16%;
+    --muted-foreground: 215 12% 55%;
+
+    --accent: 270 60% 60%;
+    --accent-foreground: 210 20% 95%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 230 12% 18%;
+    --input: 230 12% 18%;
+    --ring: 160 84% 50%;
+
+    --radius: 0.75rem;
+
+    --glow-primary: 160 84% 50%;
+    --glow-accent: 270 60% 60%;
+
+    --sidebar-background: 230 15% 8%;
+    --sidebar-foreground: 210 20% 85%;
+    --sidebar-primary: 160 84% 50%;
+    --sidebar-primary-foreground: 230 15% 6%;
+    --sidebar-accent: 230 15% 14%;
+    --sidebar-accent-foreground: 210 20% 85%;
+    --sidebar-border: 230 12% 18%;
+    --sidebar-ring: 160 84% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display;
+  }
+}
+
+@layer utilities {
+  .text-gradient-primary {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--glow-accent)));
+  }
+  .glow-primary {
+    box-shadow: 0 0 40px -10px hsl(var(--glow-primary) / 0.4);
+  }
+  .glow-accent {
+    box-shadow: 0 0 40px -10px hsl(var(--glow-accent) / 0.4);
+  }
+  .glass {
+    @apply bg-card/50 backdrop-blur-xl border border-border;
+  }
+  .section-padding {
+    @apply px-6 py-24 md:px-12 lg:px-20;
+  }
+}
+
+a[href*="spline.design"] {
+  display: none !important;
+}
