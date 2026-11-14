@@ -1,3 +1,4 @@
+import { useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
@@ -19,9 +20,191 @@ const heroTimeline = {
 
 const HeroSection = () => {
   const { user } = useAuth();
+  const sectionRef = useRef<HTMLElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const splineAppRef = useRef<any>(null);
+
+  // Position tracking using refs to avoid re-renders on mousemove
+  const targetPos = useRef<{ x: number; y: number } | null>(null);
+  const currentPos = useRef<{ x: number; y: number } | null>(null);
+  const isHovering = useRef(false);
+  const animFrameId = useRef<number | null>(null);
+
+  const handleSplineLoad = useCallback((app: any) => {
+    splineAppRef.current = app;
+    if (app?.canvas) {
+      canvasRef.current = app.canvas;
+    } else if (containerRef.current) {
+      canvasRef.current = containerRef.current.querySelector("canvas");
+    }
+  }, []);
+
+  useEffect(() => {
+    // Respect reduced-motion preferences & detect touch devices
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const isTouchDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+
+    if (prefersReducedMotion || isTouchDevice) {
+      return;
+    }
+
+    const section = sectionRef.current;
+    if (!section) return;
+
+    const getCanvasElement = (): HTMLCanvasElement | null => {
+      if (canvasRef.current) return canvasRef.current;
+      if (splineAppRef.current?.canvas) {
+        canvasRef.current = splineAppRef.current.canvas;
+        return canvasRef.current;
+      }
+      if (containerRef.current) {
+        canvasRef.current = containerRef.current.querySelector("canvas");
+        return canvasRef.current;
+      }
+      return null;
+    };
+
+    // Smooth animation loop using linear interpolation (lerp)
+    const updateEyeMovement = () => {
+      const canvas = getCanvasElement();
+      if (!canvas || !targetPos.current) {
+        animFrameId.current = null;
+        return;
+      }
+
+      if (!currentPos.current) {
+        currentPos.current = { ...targetPos.current };
+      }
+
+      const lerpSpeed = 0.12; // Smooth buttery spring interpolation
+      currentPos.current.x += (targetPos.current.x - currentPos.current.x) * lerpSpeed;
+      currentPos.current.y += (targetPos.current.y - currentPos.current.y) * lerpSpeed;
+
+      const rect = canvas.getBoundingClientRect();
+      const botCenterX = rect.left + rect.width / 2;
+      const botCenterY = rect.top + rect.height * 0.45;
+
+      const curX = currentPos.current.x;
+      const curY = currentPos.current.y;
+
+      // Dispatch synthetic pointermove to Spline canvas
+      const pointerEvent = new PointerEvent("pointermove", {
+        clientX: curX,
+        clientY: curY,
+        pageX: curX + window.scrollX,
+        pageY: curY + window.scrollY,
+        bubbles: true,
+        cancelable: true,
+        pointerType: "mouse",
+        isPrimary: true,
+      });
+      canvas.dispatchEvent(pointerEvent);
+      splineAppRef.current?.requestRender?.();
+
+      // If cursor left hero section and eyes returned close to center, settle and stop loop
+      if (!isHovering.current) {
+        const distToCenter = Math.hypot(curX - botCenterX, curY - botCenterY);
+        if (distToCenter < 0.8) {
+          currentPos.current = { x: botCenterX, y: botCenterY };
+          const centerEvent = new PointerEvent("pointermove", {
+            clientX: botCenterX,
+            clientY: botCenterY,
+            pageX: botCenterX + window.scrollX,
+            pageY: botCenterY + window.scrollY,
+            bubbles: true,
+            cancelable: true,
+            pointerType: "mouse",
+          });
+          canvas.dispatchEvent(centerEvent);
+          canvas.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
+          splineAppRef.current?.requestRender?.();
+          animFrameId.current = null;
+          return;
+        }
+      }
+
+      animFrameId.current = requestAnimationFrame(updateEyeMovement);
+    };
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (e.pointerType === "touch") return;
+
+      const canvas = getCanvasElement();
+      if (!canvas) return;
+
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+
+      const botCenterX = rect.left + rect.width / 2;
+      const botCenterY = rect.top + rect.height * 0.45;
+
+      // Relative delta from bot position
+      const deltaX = e.clientX - botCenterX;
+      const deltaY = e.clientY - botCenterY;
+
+      // Normalize relative to bot dimensions
+      const maxRadius = Math.min(rect.width, rect.height) * 0.55;
+      const normX = deltaX / (maxRadius || 1);
+      const normY = deltaY / (maxRadius || 1);
+
+      // Clamp pupil displacement within natural eye boundaries
+      const maxOffset = 0.85;
+      const dist = Math.hypot(normX, normY);
+      let clampedNormX = normX;
+      let clampedNormY = normY;
+      if (dist > maxOffset) {
+        clampedNormX = (normX / dist) * maxOffset;
+        clampedNormY = (normY / dist) * maxOffset;
+      }
+
+      // Map clamped coordinates back to canvas target coordinates
+      const targetX = botCenterX + clampedNormX * (rect.width * 0.38);
+      const targetY = botCenterY + clampedNormY * (rect.height * 0.38);
+
+      if (!isHovering.current) {
+        isHovering.current = true;
+        canvas.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
+      }
+
+      targetPos.current = { x: targetX, y: targetY };
+
+      if (!animFrameId.current) {
+        animFrameId.current = requestAnimationFrame(updateEyeMovement);
+      }
+    };
+
+    const handlePointerLeave = () => {
+      const canvas = getCanvasElement();
+      if (!canvas) return;
+
+      isHovering.current = false;
+      const rect = canvas.getBoundingClientRect();
+      const botCenterX = rect.left + rect.width / 2;
+      const botCenterY = rect.top + rect.height * 0.45;
+
+      // Smoothly return to neutral forward-facing position
+      targetPos.current = { x: botCenterX, y: botCenterY };
+
+      if (!animFrameId.current) {
+        animFrameId.current = requestAnimationFrame(updateEyeMovement);
+      }
+    };
+
+    section.addEventListener("pointermove", handlePointerMove, { passive: true });
+    section.addEventListener("pointerleave", handlePointerLeave, { passive: true });
+
+    return () => {
+      section.removeEventListener("pointermove", handlePointerMove);
+      section.removeEventListener("pointerleave", handlePointerLeave);
+      if (animFrameId.current) {
+        cancelAnimationFrame(animFrameId.current);
+      }
+    };
+  }, []);
   
   return (
-    <section className="relative min-h-screen flex items-center section-padding overflow-hidden">
+    <section ref={sectionRef} className="relative min-h-screen flex items-center section-padding overflow-hidden">
       {/* Animated background glows */}
       <motion.div
         initial={{ opacity: 0, scale: 0.8 }}
@@ -123,10 +306,11 @@ const HeroSection = () => {
           </div>
 
           {/* Right Column: Spline 3D Component with safe non-blocking pointer events */}
-          <div className="flex-1 w-full h-[350px] sm:h-[480px] lg:h-[650px] relative pointer-events-none select-none overflow-hidden touch-pan-y">
+          <div ref={containerRef} className="flex-1 w-full h-[350px] sm:h-[480px] lg:h-[650px] relative pointer-events-none select-none overflow-hidden touch-pan-y">
             <div className="w-full h-full pointer-events-none [&_canvas]:pointer-events-none [&_canvas]:touch-pan-y">
               <Spline
                 scene="https://prod.spline.design/fT6u-SNGjIccSXRI/scene.splinecode" 
+                onLoad={handleSplineLoad}
               />
             </div>
             {/* Small black box overlay at the bottom right */}
